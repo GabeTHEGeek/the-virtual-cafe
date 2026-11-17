@@ -1,0 +1,8 @@
+Amazing Grace — The Virtual Café piano arrangement
+
+Traditional tune: NEW BRITAIN (public domain)
+Piano samples: Salamander Grand Piano V3 by Alexander Holm
+Source: https://github.com/sfzinstruments/SalamanderGrandPiano
+License: Creative Commons Attribution 3.0 Unported, https://creativecommons.org/licenses/by/3.0/
+Sample distribution: https://tonejs.github.io/audio/salamander/
+Samples were pitch-shifted, shaped, arranged, mixed and encoded for this recording.

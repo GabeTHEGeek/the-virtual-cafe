@@ -1,0 +1,15 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "the-virtual-cafe",
+  "workers_dev": true,
+  "preview_urls": false,
+  "main": "worker/index.ts",
+  "compatibility_date": "2026-05-03",
+  "compatibility_flags": ["nodejs_compat"],
+  "vars": { "BETA_REQUIRED": "1" },
+  "assets": { "directory": "./out", "binding": "ASSETS", "run_worker_first": true },
+  "durable_objects": { "bindings": [{ "name": "ROOMS", "class_name": "CafeRoom" }, { "name": "DIRECTORY", "class_name": "CafeDirectory" }] },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["CafeRoom"] }, { "tag": "v2", "new_sqlite_classes": ["CafeDirectory"] }],
+  "d1_databases": [{ "binding": "DB", "database_name": "virtual-cafe", "database_id": "00000000-0000-4000-8000-000000000000" }],
+  "observability": { "enabled": true, "head_sampling_rate": 0.1 }
+}

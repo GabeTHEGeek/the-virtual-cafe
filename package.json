@@ -1,0 +1,36 @@
+{
+  "name": "the-virtual-cafe",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "check": "tsc --noEmit",
+    "check:worker": "tsc -p worker/tsconfig.json",
+    "cafe:dev": "npm run build && wrangler dev --ip 127.0.0.1 --port 8787",
+    "test:room": "node --test tests/room.test.mjs",
+    "test:browser": "node --test tests/browser.test.mjs"
+  },
+  "dependencies": {
+    "better-auth": "^1.7.25",
+    "next": "^16.0.0",
+    "obscenity": "^0.4.6",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^5.20261115.1",
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "@types/ws": "^8.18.2",
+    "playwright": "^1.65.1",
+    "typescript": "^5.9",
+    "wrangler": "^4.162.0",
+    "ws": "^8.23.0"
+  },
+  "engines": {
+    "node": ">=22.12.0"
+  }
+}

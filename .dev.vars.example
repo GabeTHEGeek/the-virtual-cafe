@@ -1,0 +1,8 @@
+# Copy to .dev.vars for local auth testing. Leave Google values unset for guest-only mode.
+BETTER_AUTH_URL=http://127.0.0.1:8787
+# GUEST_SECRET=
+# BETTER_AUTH_SECRET=
+# GOOGLE_CLIENT_ID=
+# GOOGLE_CLIENT_SECRET=
+# CAFE_ADMIN_TOKEN=
+# PUBLIC_ORIGIN=https://your-cafe.example
