@@ -11,7 +11,7 @@ export const CafeSeat = memo(function CafeSeat({ seat, own, selected, located, c
   const { occupant } = seat;
   const style = {
     left: `${seat.x}%`, top: `${seat.y}%`, '--scale': seat.scale, '--flip': seat.flip ? -1 : 1,
-    '--avatar-width': `${avatarWidthPercent * seat.scale}cqw`, '--seated-anchor': `${seatedAnchor * 100}%`, '--idle-delay': `-${seat.x / 5}s`, zIndex: occupant ? Math.round(seat.y) : 100,
+    '--avatar-width': `${avatarWidthPercent * seat.scale}cqw`, '--seated-anchor': `${seatedAnchor * 100}%`, '--idle-delay': `-${seat.x / 5}s`, zIndex: occupant ? seat.layer ?? Math.round(seat.y) : 100,
   } as CSSProperties;
 
   if (!occupant && !choosing) return null;
@@ -37,6 +37,7 @@ export const CafeSeat = memo(function CafeSeat({ seat, own, selected, located, c
   const left = before.seat.occupant;
   const right = after.seat.occupant;
   return before.seat.id === after.seat.id && before.own === after.own && before.selected === after.selected
+    && before.seat.layer === after.seat.layer && before.seat.x === after.seat.x && before.seat.y === after.seat.y && before.seat.scale === after.seat.scale
     && before.located === after.located && before.choosing === after.choosing && before.typing === after.typing && before.onSelect === after.onSelect
     && left?.id === right?.id && left?.name === right?.name && left?.animal === right?.animal
     && left?.presence === right?.presence && left?.disconnected === right?.disconnected;

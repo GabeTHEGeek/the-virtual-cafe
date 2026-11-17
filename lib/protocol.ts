@@ -18,7 +18,7 @@ const presence = z.enum(presences);
 
 export const commandSchema = z.discriminatedUnion('type', [
   z.object({type: z.literal('JOIN_ROOM'), profile: profileSchema.extend({presence})}),
-  z.object({type: z.literal('CHANGE_SEAT'), seatId: z.string().max(20)}),
+  z.object({type: z.literal('CHANGE_SEAT'), seatId: z.string().max(20), requestId: publicId.optional(), visitorId: publicId.optional()}),
   z.object({type: z.literal('UPDATE_STATUS'), presence}),
   z.object({type: z.literal('UPDATE_PROFILE'), profile: profileSchema}),
   z.object({type: z.literal('UPDATE_WORKING_ON'), work: clean(96)}),
@@ -45,7 +45,7 @@ export type PublicMessage = { id: string; sender: string; accountId?: string; na
 export type GuestbookNote = {id: string; sender: string; accountId?: string; name: string; body: string; time: number; own: boolean};
 export type DirectMessage = { id: number; sender: string; recipient: string; body: string; time: number };
 export type ServerFrame = { v: 1 } & (
-  | {type: 'ROOM_SNAPSHOT'; visitors: Visitor[]; self: string; connected: number; blocked: string[]; blockedNames?: Record<string, string>; blockedAccounts?: Record<string, string>; discoverable?: string[]; arrival?: Arrival; messages: PublicMessage[]}
+  | {type: 'ROOM_SNAPSHOT'; seatRequestId?: string; visitors: Visitor[]; self: string; connected: number; blocked: string[]; blockedNames?: Record<string, string>; blockedAccounts?: Record<string, string>; discoverable?: string[]; arrival?: Arrival; messages: PublicMessage[]}
   | {type: 'GUESTBOOK'; notes: GuestbookNote[]}
   | {type: 'SNACK_ORDERED'; snack: Snack}
   | ({type: 'CAFE_ORDERED'; recipient?: string} & CafeOrder)

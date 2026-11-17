@@ -1,5 +1,8 @@
 'use client';
 
+import { mentionsVisitor } from '../lib/mentions';
+import { useMentionSound } from '../lib/use-mention-sound';
+
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { AudioPlayer } from '../components/AudioPlayer';
 import { PomodoroTimer } from '../components/PomodoroTimer';
@@ -55,6 +58,8 @@ export default function Cafe() {
   const [guestbookOpen, setGuestbookOpen] = useState(false);
   const [postcardOpen, setPostcardOpen] = useState(false);
   const [unreadChat, setUnreadChat] = useState(false);
+  const [unreadMention, setUnreadMention] = useState(false);
+  const pingMention = useMentionSound();
   const [messagesOpen, setMessagesOpen] = useState(false);
   const [contact, setContact] = useState<Contact>();
   const [editing, setEditing] = useState(false);
@@ -62,6 +67,7 @@ export default function Cafe() {
   const [bubbles, setBubbles] = useState<Record<string, string>>({});
   const pendingJoin = useRef<VisitorDetails>(undefined);
   const nextJoin = useRef(false);
+  const seatedVisit = useRef<{room: string; invite?: string; profile: VisitorDetails; rejoining: boolean}>(undefined);
   const usedInvite = useRef<string>(undefined);
   const bubbleTimers = useRef(new Map<string, ReturnType<typeof setTimeout>>());
   const live = useRoom(room, mock === false, inviteToken);
@@ -111,8 +117,15 @@ export default function Cafe() {
   }, [mock, live.accountBlocksVersion]);
 
   useEffect(() => {
-    if (mock !== false || live.connection !== 'ready') return;
+    if (mock !== false) return;
+    const visit = seatedVisit.current;
+    if (live.connection === 'closed') seatedVisit.current = undefined;
+    if (live.connection !== 'ready') {
+      if (visit) visit.rejoining = false;
+      return;
+    }
     if (visitor) {
+      if (inviteToken) usedInvite.current = inviteToken;
       setEntryOpen(false);
       setChoosing(false);
       revealSeat(visitor.seatId);
@@ -121,6 +134,10 @@ export default function Cafe() {
       nextJoin.current = false;
       const profile = pendingJoin.current;
       live.send({type: 'JOIN_ROOM', profile});
+    } else if (visit?.room === room && visit.invite === inviteToken) {
+      if (visit.rejoining) return;
+      pendingJoin.current = visit.profile;
+      visit.rejoining = live.send({type: 'JOIN_ROOM', profile: visit.profile});
     } else if (inviteToken && usedInvite.current !== inviteToken) {
       const profile = account?.profile ? {...account.profile, presence: savedGuestProfile?.presence ?? 'Focused' as const} : savedGuestProfile;
       if (profile) {
@@ -133,20 +150,29 @@ export default function Cafe() {
   useEffect(() => {
     if (mock !== false || !visitor || live.connection !== 'ready') return;
     const {name, animal, presence, work, bio, interestIds} = visitor;
-    try { localStorage.setItem('cafe-guest-profile', JSON.stringify({name, animal, presence, work, bio, interestIds})); }
+    const profile = {name, animal, presence, work, bio, interestIds};
+    seatedVisit.current = {room, invite: inviteToken, profile, rejoining: false};
+    try { localStorage.setItem('cafe-guest-profile', JSON.stringify(profile)); }
     catch { /* Room membership is maintained on the server. */ }
-  }, [mock, live.connection, visitor]);
+  }, [mock, live.connection, visitor, room, inviteToken]);
 
   useEffect(() => {
     const timers = bubbleTimers.current;
     setBubbles({});
     setUnreadChat(false);
+    setUnreadMention(false);
     return () => {timers.forEach(clearTimeout); timers.clear();};
   }, [room, inviteToken]);
 
   useEffect(() => {
     const message = live.lastMessage;
     if (!message) return;
+    const incoming = message.sender !== live.self && !blocked.has(message.sender)
+      && !(message.accountId && account?.blocked?.includes(message.accountId));
+    if (incoming && visitor && !message.gifId && mentionsVisitor(message.body, visitor.name)) {
+      pingMention();
+      if (!chat || document.visibilityState !== 'visible') setUnreadMention(true);
+    }
     if (!chat && message.sender !== live.self && !blocked.has(message.sender)
       && !(message.accountId && account?.blocked?.includes(message.accountId))) setUnreadChat(true);
     const timers = bubbleTimers.current;
@@ -228,7 +254,10 @@ export default function Cafe() {
     }
     if (!visitor || !choosing) return;
     if (!mock) {
-      live.send({type: 'CHANGE_SEAT', seatId: seat.id});
+      if (live.send({type: 'CHANGE_SEAT', seatId: seat.id})) {
+        setChoosing(false);
+        setProfileId(undefined);
+      }
       return;
     }
     setVisitor(current => current && ({ ...current, seatId: seat.id }));
@@ -287,6 +316,7 @@ export default function Cafe() {
     url.searchParams.set('room', destination);
     setInviteToken(undefined);
     history.replaceState(null, '', url);
+    seatedVisit.current = undefined;
     nextJoin.current = true;
     setRoom(destination);
   }
@@ -391,8 +421,8 @@ export default function Cafe() {
         {visitor && <button className="social-action" type="button" aria-pressed={peopleOpen} onClick={() => {
           setGuestbookOpen(false); setPeopleOpen(!peopleOpen); setSnackMenu(false); setInviteOpen(false); setChat(false); setEditing(false); setMessagesOpen(false); setProfileId(undefined);
         }}>People</button>}
-        {!mock && visitor && <button type="button" aria-pressed={chat} onClick={() => {setGuestbookOpen(false); setChat(!chat); setSnackMenu(false); if (!chat) setUnreadChat(false); setInviteOpen(false); setPeopleOpen(false); setEditing(false); setMessagesOpen(false); setProfileId(undefined);}} className="social-action chat-action" aria-label={unreadChat ? 'Chat, unread messages' : 'Chat'}>Chat
-          {unreadChat && <span className="chat-unread" aria-hidden="true" />}</button>}
+        {!mock && visitor && <button type="button" aria-pressed={chat} onClick={() => {setGuestbookOpen(false); setChat(!chat); setSnackMenu(false); if (!chat) {setUnreadChat(false); setUnreadMention(false);} setInviteOpen(false); setPeopleOpen(false); setEditing(false); setMessagesOpen(false); setProfileId(undefined);}} className="social-action chat-action" aria-label={unreadMention ? 'Chat, you were mentioned' : unreadChat ? 'Chat, unread messages' : 'Chat'}>Chat
+          {unreadMention ? <span className="chat-mention-badge" aria-hidden="true">@</span> : unreadChat && <span className="chat-unread" aria-hidden="true" />}</button>}
         {!mock && visitor && <button type="button" className="social-action" aria-pressed={guestbookOpen} onClick={() => {
           setGuestbookOpen(!guestbookOpen); setChat(false); setSnackMenu(false); setInviteOpen(false);
           setPeopleOpen(false); setEditing(false); setMessagesOpen(false); setProfileId(undefined);
@@ -411,7 +441,7 @@ export default function Cafe() {
     </header>
 
     <section className="stage" aria-label="The Virtual Café">
-      <CafeScene occupancy={occupancy} time={cafeTime} visitorId={visitor?.id} profileId={profileId} locatedId={locatedId} choosing={choosing} rain={rain} arrival={mock ? mockArrival : live.arrival && !blocked.has(live.arrival.id) ? live.arrival : undefined}
+      <CafeScene onLayoutOpen={() => {setEntryOpen(false); setProfileId(undefined);}} editable={mock === true} occupancy={occupancy} time={cafeTime} visitorId={visitor?.id} profileId={profileId} locatedId={locatedId} choosing={choosing} rain={rain} arrival={mock ? mockArrival : live.arrival && !blocked.has(live.arrival.id) ? live.arrival : undefined}
         bubbles={Object.fromEntries(Object.entries(bubbles).filter(([id]) => !blocked.has(id)))}
         typing={Object.fromEntries(Object.entries(live.typing).filter(([id]) => !blocked.has(id)))}
         onBarista={() => {
@@ -478,7 +508,7 @@ export default function Cafe() {
         post={(id, body) => live.send({type: 'POST_GUESTBOOK_NOTE', id, body})}
         remove={id => live.send({type: 'REMOVE_GUESTBOOK_NOTE', id})}
         report={note => report(note.sender, note.id)} />}
-      {!mock && visitor && chat && <RoomChat self={visitor.id} messages={live.messages.filter(message => !blocked.has(message.sender) && !(message.accountId && account?.blocked?.includes(message.accountId)))}
+      {!mock && visitor && chat && <RoomChat self={visitor.id} selfName={visitor.name} people={directory.filter(person => person.id !== visitor.id)} messages={live.messages.filter(message => !blocked.has(message.sender) && !(message.accountId && account?.blocked?.includes(message.accountId)))}
         onTyping={sendTyping} send={body => live.send({type: 'SEND_PUBLIC_MESSAGE', body})}
         sendGif={gifId => live.send({type: 'SEND_PUBLIC_GIF', gifId})} close={() => setChat(false)}
         report={(message: PublicMessage) => report(message.sender, message.id)} />}

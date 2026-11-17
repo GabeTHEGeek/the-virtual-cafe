@@ -21,6 +21,42 @@ async function join(page, url, name, presence) {
   await page.locator('.own-seat').waitFor();
 }
 
+test('an open tab reseats its visitor after the sleep disconnect expires', {
+  skip: !process.env.CAFE_TEST_EXPIRY,
+  timeout: 90_000,
+}, async t => {
+  const url = `${origin}/?room=sleep-${crypto.randomUUID().slice(0, 8)}`;
+  const browser = await chromium.launch(launchOptions);
+  t.after(() => browser.close());
+  const sleeper = await browser.newPage();
+  const observer = await browser.newPage();
+  let serverSocket;
+  await sleeper.routeWebSocket('**/api/connect?*', socket => {
+    serverSocket = socket.connectToServer();
+  });
+  await sleeper.goto(url);
+  await sleeper.getByText('Connecting to the café…').waitFor({state: 'hidden'});
+  await sleeper.getByRole('textbox', {name: 'Nickname'}).fill('Clover');
+  await sleeper.getByRole('textbox', {name: 'Working on'}).fill('Sketching wildflowers');
+  await sleeper.getByRole('combobox', {name: 'Starting presence'}).selectOption('Available');
+  await button(sleeper, 'Take a seat').click();
+  await sleeper.locator('.own-seat').waitFor();
+  await join(observer, url, 'Juniper');
+  const clover = button(observer, /^Clover, Available/);
+  await clover.waitFor();
+
+  const offline = route => route.abort('internetdisconnected');
+  await sleeper.route('**/api/guest', offline);
+  await serverSocket.close();
+  await clover.waitFor({state: 'detached', timeout: 70_000});
+  await sleeper.unroute('**/api/guest', offline);
+
+  await sleeper.locator('.own-seat').waitFor({timeout: 16_000});
+  await clover.waitFor();
+  await clover.click();
+  await observer.getByText('Sketching wildflowers', {exact: true}).waitFor();
+});
+
 test('two browser instances share seats, edit presence, mute chat, and recover on reload', {timeout: 35_000}, async t => {
   const url = `${origin}/?room=browser-${crypto.randomUUID().slice(0, 8)}`;
   const first = await chromium.launch(launchOptions);
@@ -436,4 +472,272 @@ test('first entries chime, treats reach another seat, and postcards save and sha
     await share.getByText('Enter your private beta access code').waitFor();
     assert.equal((await share.request.get(origin + '/art/cafe.webp')).status(), 403);
   }
+});
+
+test('coworking layout preview supports dragging, layers, persistence and JSON', {timeout: 30_000}, async t => {
+  const browser = await chromium.launch(launchOptions);
+  t.after(() => browser.close());
+  const page = await browser.newPage({viewport: {width: 1440, height: 900}});
+  page.setDefaultTimeout(6500);
+  const errors = [];
+  page.on('pageerror', error => errors.push(error.message));
+  await page.goto(`${origin}/?preview=1`);
+  await button(page, 'Edit table layout').click();
+  assert.equal(await page.locator('.seat-snack').count(), 8);
+  assert.equal(await page.locator('.seat-drink').count(), 8);
+  const editor = page.getByRole('complementary', {name: 'Table layout editor'});
+  await editor.getByLabel('Object', {exact: true}).selectOption('laptop');
+  const point = button(page, 'Place shared-1 laptop');
+  const box = await point.boundingBox();
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(box.x + 35, box.y + 22, {steps: 5});
+  await page.mouse.up();
+  const data = await page.evaluate(() => JSON.parse(localStorage.getItem('cafe-table-layout-v1')));
+  assert.notEqual(data[0].seats['shared-1'].laptop.x, 69);
+  const expected = data[0].seats['shared-1'].laptop.x;
+  await editor.getByRole('spinbutton', {name: 'Placement scale', exact: true}).fill('1.2');
+  await editor.getByRole('spinbutton', {name: 'Placement layer', exact: true}).fill('92');
+  await page.reload();
+  await button(page, 'Edit table layout').click();
+  await editor.getByLabel('Object', {exact: true}).selectOption('laptop');
+  assert.equal(Number(await editor.getByRole('spinbutton', {name: 'Placement x', exact: true}).inputValue()), expected);
+  assert.equal(Number(await editor.getByRole('spinbutton', {name: 'Placement scale', exact: true}).inputValue()), 1.2);
+  assert.equal(await page.locator('.desk-laptop[data-seat-id=shared-1]').evaluate(element => getComputedStyle(element).zIndex), '92');
+  const downloaded = page.waitForEvent('download');
+  await button(page, 'Export JSON').click();
+  assert.equal((await downloaded).suggestedFilename(), 'cafe-tables.json');
+  await page.screenshot({path: '/private/tmp/cafe-layout-editor.png'});
+  await button(page, 'Reset layout').click();
+  assert.equal(Number(await editor.getByRole('spinbutton', {name: 'Placement x', exact: true}).inputValue()), 69);
+  const imported = structuredClone(data);
+  imported[0].seats['shared-1'].laptop.x = 100;
+  await editor.getByLabel('Import JSON').setInputFiles({
+    name: 'layout.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(imported)),
+  });
+  await page.waitForFunction(() => JSON.parse(localStorage.getItem('cafe-table-layout-v1'))[0].seats['shared-1'].laptop.x === 100);
+  assert.equal(Number(await editor.getByRole('spinbutton', {name: 'Placement x', exact: true}).inputValue()), 100);
+  await editor.getByLabel('Import JSON').setInputFiles({
+    name: 'bad.json', mimeType: 'application/json', buffer: Buffer.from('{}'),
+  });
+  await page.getByRole('alert').getByText('Choose a valid café table layout JSON file.').waitFor();
+  await button(page, 'Close layout editor').click();
+  assert.equal(await page.locator('.layout-point').count(), 0);
+  assert.deepEqual(errors, []);
+});
+
+test('public chat suggests mentions and gives the recipient a distinct ping', {timeout: 30_000}, async t => {
+  const browser = await chromium.launch(launchOptions);
+  t.after(() => browser.close());
+  const sender = await browser.newPage({viewport: {width: 1440, height: 900}});
+  const recipient = await browser.newPage({viewport: {width: 1366, height: 768}});
+  await recipient.addInitScript(() => {
+    window.mentionTones = 0;
+    const start = OscillatorNode.prototype.start;
+    OscillatorNode.prototype.start = function (...args) {
+      if (this.frequency.value === 660 || this.frequency.value === 880) window.mentionTones++;
+      return start.apply(this, args);
+    };
+  });
+  const url = `${origin}/?room=mention-${crypto.randomUUID().slice(0, 8)}`;
+  await join(sender, url, 'Mochi');
+  await join(recipient, url, 'Juniper Rose', 'Available');
+  await button(sender, /^Juniper Rose, Available/).waitFor();
+  await button(sender, 'Chat').click();
+  const panel = sender.getByRole('region', {name: 'Public chat'});
+  const bounds = await panel.boundingBox();
+  assert.ok(bounds.width >= 400);
+  const input = sender.getByRole('textbox', {name: 'Public message'});
+  await input.fill('@Juni');
+  await sender.getByRole('option', {name: '@Juniper Rose', exact: true}).click();
+  assert.equal(await input.inputValue(), '@"Juniper Rose" ');
+  await input.press('End');
+  await input.pressSequentially('Ready for a focus session?');
+  await button(sender, 'Send').click();
+  await button(recipient, 'Chat, you were mentioned').waitFor();
+  await recipient.waitForFunction(() => window.mentionTones === 2);
+  await button(recipient, 'Chat, you were mentioned').click();
+  await recipient.locator('.mentioned-message').getByText(/Ready for a focus session/).waitFor();
+  assert.equal(await recipient.locator('.chat-mention-badge').count(), 0);
+  await delay(1900);
+  await input.fill('@Juniper Rosemary has joined us.');
+  await button(sender, 'Send').click();
+  await recipient.getByRole('log').getByText(/Rosemary/).waitFor();
+  assert.equal(await recipient.evaluate(() => window.mentionTones), 2);
+  assert.equal(await recipient.locator('.mentioned-message').count(), 1);
+});
+
+test('seat changes render before server confirmation and roll back a lost seat race', {timeout: 25_000}, async t => {
+  const browser = await chromium.launch(launchOptions);
+  t.after(() => browser.close());
+  const a = await browser.newPage();
+  const b = await browser.newPage();
+  let hold = false;
+  const snapshots = [];
+  let client;
+  await a.routeWebSocket('**/api/connect?*', route => {
+    client = route;
+    const server = route.connectToServer();
+    server.onMessage(message => {
+      if (hold && typeof message === 'string' && message.startsWith('{') && JSON.parse(message).type === 'ROOM_SNAPSHOT') {
+        snapshots.push(message);
+      } else route.send(message);
+    });
+  });
+  const url = `${origin}/?room=instant-${crypto.randomUUID().slice(0, 8)}`;
+  await join(a, url, 'Clover');
+  await join(b, url, 'Juniper');
+  await button(a, /^Juniper, /).waitFor();
+  hold = true;
+  await button(a, 'Change seat').click();
+  await button(a, 'Move to Window Bar seat 1').click();
+  await a.locator('#seat-window-1.own-seat').waitFor({timeout: 500});
+  await button(a, 'Change seat').waitFor();
+  const waitForSnapshot = async () => {
+    const deadline = Date.now() + 4000;
+    while (!snapshots.length && Date.now() < deadline) await delay(25);
+    assert.ok(snapshots.length, 'server must confirm or reject the move');
+  };
+  await waitForSnapshot();
+  snapshots.splice(0).forEach(frame => client.send(frame));
+  await button(b, /^Clover, Focused, Window Bar/).waitFor();
+
+  // A sees the old empty seat until we release B's broadcast.
+  await button(b, 'Change seat').click();
+  await button(b, 'Move to Window Bar seat 2').click();
+  await b.locator('#seat-window-2.own-seat').waitFor();
+  await waitForSnapshot();
+  await button(a, 'Change seat').click();
+  await button(a, 'Move to Window Bar seat 2').click();
+  await a.locator('#seat-window-2.own-seat').waitFor({timeout: 500});
+  await a.getByRole('status').getByText('That seat is unavailable. Pick another open seat.').waitFor();
+  hold = false;
+  snapshots.splice(0).forEach(frame => client.send(frame));
+  await a.locator('#seat-window-1.own-seat').waitFor();
+  await button(a, /^Juniper, Focused, Window Bar/).waitFor();
+  assert.notEqual(await a.locator('.own-seat').getAttribute('id'), await b.locator('.own-seat').getAttribute('id'));
+});
+
+test('rapid seat changes keep the latest destination through unrelated snapshots and older confirmations', {timeout: 20_000}, async t => {
+  const browser = await chromium.launch(launchOptions);
+  t.after(() => browser.close());
+  const a = await browser.newPage();
+  const b = await browser.newPage();
+  let hold = false;
+  let client;
+  let previous;
+  const queued = [];
+  await a.routeWebSocket('**/api/connect?*', route => {
+    client = route;
+    route.connectToServer().onMessage(message => {
+      const frame = typeof message === 'string' && message.startsWith('{') ? JSON.parse(message) : undefined;
+      if (frame?.type === 'ROOM_SNAPSHOT') {
+        if (hold) {queued.push(message); return;}
+        previous = message;
+      }
+      route.send(message);
+    });
+  });
+  const url = `${origin}/?room=rapid-${crypto.randomUUID().slice(0, 8)}`;
+  await join(a, url, 'Clover');
+  await join(b, url, 'Juniper');
+  await button(a, /^Juniper, /).waitFor();
+  const otherSeat = await b.locator('.own-seat').getAttribute('id');
+  hold = true;
+  await button(a, 'Change seat').click();
+  await button(a, 'Move to Window Bar seat 1').click();
+  await a.locator('#seat-window-1.own-seat').waitFor();
+  client.send(previous);
+  await a.waitForTimeout(100);
+  assert.equal(await a.locator('.own-seat').getAttribute('id'), 'seat-window-1');
+
+  const waitForAck = async count => {
+    const deadline = Date.now() + 4000;
+    while (queued.filter(frame => JSON.parse(frame).seatRequestId).length < count && Date.now() < deadline) await delay(25);
+    assert.equal(queued.filter(frame => JSON.parse(frame).seatRequestId).length, count);
+  };
+  await waitForAck(1);
+  await button(a, 'Change seat').click();
+  await button(a, 'Move to Window Bar seat 3').click();
+  await a.locator('#seat-window-3.own-seat').waitFor();
+  await waitForAck(2);
+  const firstAck = queued.find(frame => JSON.parse(frame).seatRequestId);
+  client.send(firstAck);
+  await a.waitForTimeout(100);
+  assert.equal(await a.locator('.own-seat').getAttribute('id'), 'seat-window-3');
+  assert.equal(await b.locator('.own-seat').getAttribute('id'), otherSeat);
+  hold = false;
+  queued.splice(0).forEach(frame => client.send(frame));
+  await a.locator('#seat-window-3.own-seat').waitFor();
+  await button(b, /^Clover, Focused, Window Bar/).waitFor();
+  assert.equal(await b.locator('.own-seat').getAttribute('id'), otherSeat);
+});
+
+test('music switches keep the latest track playing when an older playback attempt fails', {timeout: 25_000}, async t => {
+  const browser = await chromium.launch(launchOptions);
+  t.after(() => browser.close());
+  const page = await browser.newPage({viewport: {width: 1366, height: 768}});
+  await page.addInitScript(() => {
+    const play = HTMLMediaElement.prototype.play;
+    window.delayedJazzFailure = false;
+    HTMLMediaElement.prototype.play = function () {
+      if (this.src.endsWith('/jazz.m4a') && !window.delayedJazzFailure) {
+        window.delayedJazzFailure = true;
+        return new Promise((resolve, reject) => setTimeout(() => {
+          window.oldMusicAttemptFinished = true;
+          reject(new DOMException('Previous track failed', 'NotSupportedError'));
+        }, 700));
+      }
+      return play.call(this);
+    };
+  });
+  await page.goto(origin + '/?preview=1');
+  await button(page, 'Browse café').click();
+  await page.waitForFunction(() => !document.querySelector('.audio-player audio').paused);
+  await chooseOption(page, 'Music style', 'Jazz');
+  await chooseOption(page, 'Music style', 'Piano');
+  await page.waitForFunction(() => {
+    const audio = document.querySelector('.audio-player audio');
+    return audio.src.endsWith('/piano.m4a') && !audio.paused && audio.currentTime > 0;
+  });
+  await page.waitForFunction(() => window.oldMusicAttemptFinished);
+  assert.equal(await page.locator('.audio-error').count(), 0);
+  await button(page, 'Pause music').waitFor();
+  for (const [name, file] of [['Hip-hop Lo-fi', 'hip-hop-lofi'], ['Jazz', 'jazz'], ['Medieval Calm', 'medieval-lute'], ['Radiant Calm', 'radiant-calm'],
+    ['Hymns', 'amazing-grace-piano'], ['Countryside Morning', 'countryside-morning'], ['Lo-fi', 'lofi']]) {
+    await chooseOption(page, 'Music style', name);
+    await page.waitForFunction(file => {
+      const audio = document.querySelector('.audio-player audio');
+      return audio.src.endsWith('/' + file + '.m4a') && !audio.paused && audio.currentTime > 0 && !audio.error;
+    }, file);
+  }
+  await button(page, 'Pause music').click();
+  await page.waitForFunction(() => document.querySelector('.audio-player audio').paused);
+  await chooseOption(page, 'Music style', 'Piano');
+  assert.equal(await page.locator('.audio-error').count(), 0);
+  assert.ok(await page.locator('.audio-player audio').first().evaluate(audio => audio.paused));
+  await button(page, 'Play music').click();
+  await page.waitForFunction(() => {
+    const audio = document.querySelector('.audio-player audio');
+    return audio.src.endsWith('/piano.m4a') && !audio.paused && audio.currentTime > 0;
+  });
+});
+
+test('music can retry a real media load failure', {timeout: 20_000}, async t => {
+  const browser = await chromium.launch(launchOptions);
+  t.after(() => browser.close());
+  const page = await browser.newPage({viewport: {width: 1366, height: 768}});
+  await page.goto(origin + '/?preview=1');
+  await button(page, 'Browse café').click();
+  await page.waitForFunction(() => !document.querySelector('.audio-player audio').paused);
+  await page.route('**/radiant-calm.m4a', route => route.abort('failed'));
+  await chooseOption(page, 'Music style', 'Radiant Calm');
+  await page.getByRole('status').getByText('Could not load Radiant Calm. Press play to retry.').waitFor();
+  await page.unroute('**/radiant-calm.m4a');
+  await button(page, 'Play music').click();
+  await page.waitForFunction(() => {
+    const audio = document.querySelector('.audio-player audio');
+    return audio.src.endsWith('/radiant-calm.m4a') && !audio.paused && audio.currentTime > 0 && !audio.error;
+  });
+  assert.equal(await page.locator('.audio-error').count(), 0);
 });

@@ -383,3 +383,28 @@ test('guestbook notes are room-scoped, filtered, and removable only by their aut
   again.send('REMOVE_GUESTBOOK_NOTE', {id});
   await guest.wait(frame => frame.type === 'GUESTBOOK' && frame.notes.length === 0);
 });
+
+test('seat confirmations belong to the requester and a different visitor id cannot move anyone', async t => {
+  const name = room('seat-identity');
+  const a = await connect(name);
+  const b = await connect(name);
+  t.after(() => [a,b].forEach(({ws}) => ws.close()));
+  const one = await a.join('Clover');
+  const two = await b.join('Juniper');
+  const originalA = one.visitors.find(v => v.id === one.self).seatId;
+  const originalB = two.visitors.find(v => v.id === two.self).seatId;
+  const invalid = crypto.randomUUID();
+  a.send('CHANGE_SEAT', {seatId: 'window-1', visitorId: two.self, requestId: invalid});
+  const denied = await a.wait(snapshot(frame => frame.seatRequestId === invalid));
+  assert.equal(denied.visitors.find(v => v.id === one.self).seatId, originalA);
+  assert.equal(denied.visitors.find(v => v.id === two.self).seatId, originalB);
+  await a.wait(error('SESSION_CHANGED'));
+  const requestId = crypto.randomUUID();
+  a.send('CHANGE_SEAT', {seatId: 'window-1', visitorId: one.self, requestId});
+  const accepted = await a.wait(snapshot(frame => frame.seatRequestId === requestId));
+  assert.equal(accepted.self, one.self);
+  assert.equal(accepted.visitors.find(v => v.id === one.self).seatId, 'window-1');
+  assert.equal(accepted.visitors.find(v => v.id === two.self).seatId, originalB);
+  const observed = await b.wait(snapshot(frame => frame.visitors.some(v => v.id === one.self && v.seatId === 'window-1')));
+  assert.equal(observed.seatRequestId, undefined);
+});

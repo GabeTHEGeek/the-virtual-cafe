@@ -13,6 +13,7 @@ export type Seat = {
   y: number;
   scale: number;
   flip?: boolean;
+  layer?: number;
 };
 
 // Seat centers are measured at the cushion surface in the room artwork.

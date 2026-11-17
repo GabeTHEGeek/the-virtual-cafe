@@ -1,4 +1,6 @@
-import { Fragment } from 'react';
+import { Fragment, useEffect, useState } from 'react';
+import { defaultTables, layoutStorageKey, placementFor, validTables, type TableLayouts } from '../lib/table-layout';
+import { TableLayoutEditor } from './TableLayoutEditor';
 import { snackPlacements } from '../lib/snacks';
 import { MessageBubble } from './MessageBubble';
 import { CafeLighting } from './CafeLighting';
@@ -21,10 +23,38 @@ const markers: Record<Zone, [number, number, string]> = {
   work: [90, 33, 'laptop'],
 };
 
-export function CafeScene({ occupancy, visitorId, profileId, locatedId, choosing, rain, arrival, bubbles, typing, profileActions, time, onBarista, onSeat, onClose }: {
-  occupancy: OccupiedSeat[]; visitorId?: string; profileId?: string; locatedId?: string; choosing: boolean;
+export function CafeScene({ occupancy: originalOccupancy, editable = false, onLayoutOpen, visitorId, profileId, locatedId, choosing, rain, arrival, bubbles, typing, profileActions, time, onBarista, onSeat, onClose }: {
+  occupancy: OccupiedSeat[]; editable?: boolean; onLayoutOpen?: () => void; visitorId?: string; profileId?: string; locatedId?: string; choosing: boolean;
   time: CafeTime; rain: boolean; arrival?: Arrival; bubbles?: Record<string, string>; typing?: Record<string, boolean>; profileActions?: ReactNode; onBarista: () => void; onSeat: (seat: OccupiedSeat) => void; onClose: () => void;
 }) {
+  const [tables, setTables] = useState<TableLayouts>(defaultTables);
+  const [editing, setEditing] = useState(false);
+  const [layoutError, setLayoutError] = useState('');
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(layoutStorageKey);
+      if (saved) {
+        const value: unknown = JSON.parse(saved);
+        if (validTables(value)) setTables(value);
+      }
+    } catch { /* The bundled layout remains available. */ }
+  }, []);
+  function changeTables(value: TableLayouts) {
+    setTables(value);
+    try {
+      localStorage.setItem(layoutStorageKey, JSON.stringify(value));
+      setLayoutError('');
+    } catch { setLayoutError('Browser storage is unavailable. Export JSON to keep this layout.'); }
+  }
+  const occupancy = originalOccupancy.map(seat => {
+    const placement = placementFor(tables, seat.id, 'avatar');
+    const placed = placement ? {...seat, x: placement.x, y: placement.y, scale: placement.scale, layer: placement.layer} : seat;
+    if (!editing || seat.zone !== 'shared') return placed;
+    return {...placed, occupant: {...(seat.occupant ?? {
+      id: 'layout-' + seat.id, name: seat.id, animal: 'panda' as const, presence: 'Focused' as const,
+      work: 'Layout preview', seatId: seat.id,
+    }), snack: 'croissant' as const, drink: 'latte' as const}};
+  });
   const roomArt = cafeArtwork.rooms[time];
   const foregroundId = useId();
   const tableClip = `${foregroundId}-tables`;
@@ -77,17 +107,19 @@ export function CafeScene({ occupancy, visitorId, profileId, locatedId, choosing
       </svg>
       <CafeLighting />
       <WindowCats />
-      {occupancy.filter(seat => seat.occupant && seat.zone !== 'lounge').map(seat => <TableLaptop key={seat.id} seat={seat} />)}
+      {occupancy.filter(seat => seat.occupant && seat.zone !== 'lounge').map(seat => <TableLaptop key={seat.id} seat={seat} placement={placementFor(tables, seat.id, 'laptop')} />)}
       {occupancy.map(seat => {
         const {snack, drink} = seat.occupant ?? {};
         const point = snackPlacements[seat.id];
         if (!point || (!snack && !drink)) return null;
         const [x, y] = point;
+        const snackPoint = placementFor(tables, seat.id, 'snack');
+        const drinkPoint = placementFor(tables, seat.id, 'drink');
         return <Fragment key={seat.id}>
           {snack && <img className="seat-snack" src={`/art/snacks/${snack}.webp`} alt=""
-            style={{left: `${x / roomWidth * 100}%`, top: `${y / roomHeight * 100}%`, width: `${1.5 * seat.scale}cqw`}} />}
+            style={{left: `${snackPoint?.x ?? x / roomWidth * 100}%`, top: `${snackPoint?.y ?? y / roomHeight * 100}%`, width: `${1.5 * (snackPoint?.scale ?? seat.scale)}cqw`, zIndex: snackPoint?.layer}} />}
           {drink && <img className="seat-drink" src={`/art/drinks/${drink}.webp`} alt=""
-            style={{left: `${(x + (snack ? 20 : 0)) / roomWidth * 100}%`, top: `${(y - (snack ? 9 : 0)) / roomHeight * 100}%`, width: `${1.12 * seat.scale}cqw`}} />}
+            style={{left: `${drinkPoint?.x ?? (x + (snack ? 20 : 0)) / roomWidth * 100}%`, top: `${drinkPoint?.y ?? (y - (snack ? 9 : 0)) / roomHeight * 100}%`, width: `${1.12 * (drinkPoint?.scale ?? seat.scale)}cqw`, zIndex: drinkPoint?.layer}} />}
         </Fragment>;
       })}
       {occupancy.map(seat => {
@@ -95,6 +127,14 @@ export function CafeScene({ occupancy, visitorId, profileId, locatedId, choosing
         const message = person && !typing?.[person.id] && bubbles?.[person.id];
         return message && <MessageBubble key={seat.id} seat={seat} message={message} />;
       })}
+      {editable && <button className="layout-toggle pill" type="button" aria-pressed={editing} onClick={() => {
+        if (!editing) onLayoutOpen?.();
+        setEditing(value => !value);
+      }}>
+        {editing ? 'Close layout editor' : 'Edit table layout'}
+      </button>}
+      {editing && <TableLayoutEditor tables={tables} onChange={changeTables} />}
+      {editing && layoutError && <p className="layout-storage-error" role="alert">{layoutError}</p>}
       {selected?.occupant && <div className="profile-anchor" style={{
         left: `${Math.max(17, Math.min(83, selected.x))}%`,
         top: `${selected.y < 44 ? selected.y + 3 : selected.y - 15}%`,

@@ -30,6 +30,12 @@ A cozy multiplayer coworking room. Pick a seated animal avatar, put on music, wo
 
 ![Fictional café visitors planning a 25-minute focus session in the public chat panel](docs/screenshots/public-chat.jpg)
 
+## Developer table layout
+
+Open `http://127.0.0.1:8787/?preview=1` with the local Worker running on port 8787, or use the development preview, then choose **Edit table layout**. Select a coworking seat and object to drag its placement point or edit its position, scale, and layer. Both coworking tables show an avatar, laptop, croissant, and latte at every seat while editing.
+
+Layouts save in the current browser. **Export JSON** saves reusable scene data, **Import JSON** loads a validated layout, and **Reset layout** restores the bundled defaults. Placement points are relative to each table origin in [lib/table-layout.ts](lib/table-layout.ts). The existing painted furniture and foreground masks remain in place. The editor covers the eight coworking seats.
+
 ## What you can do
 
 | Area | Features |
@@ -37,7 +43,7 @@ A cozy multiplayer coworking room. Pick a seated animal avatar, put on music, wo
 | Take a seat | Choose a panda, fox, cat, or rabbit. Get one of 25 seats automatically and move to an open spot. |
 | Get some work done | Set your presence, choose a focus or break interval, preview chimes, and keep a private checklist in your browser. |
 | Meet people | Use room chat, GIFs, profiles, invites, and a shared guestbook. Registered visitors can send direct messages. |
-| Set the mood | Switch between Day and Night, choose music or a soundscape, and pet the two cats by the window. |
+| Set the mood | Switch between Day and Night, choose music including Hip-hop Lo-fi or a soundscape, and pet the two cats by the window. |
 | Share something | Send a friend a snack or drink. Save an illustrated postcard as a PNG or create a shareable link. |
 
 ## How it works
@@ -61,7 +67,7 @@ npm run cafe:dev
 
 Open `http://127.0.0.1:8787/` for live guests. Use independent browser profiles to join simultaneously. Two tabs with the same guest cookie represent one guest, and the newer connection takes over. `npm run dev` starts the Next.js mock preview on port 3000. Add `?preview=1` to the local Worker URL for mock preview on port 8787.
 
-A room is created on first visit. The default is `main`. Once seated, choose **Invite** to share a reusable, seven-day `/cafe/join/<token>` link to that exact café. Set `PUBLIC_ORIGIN` when links should use a canonical HTTPS host. An unavailable or expired link shows an error. A full café offers retry and an explicit switch. Local room URLs such as `/?room=book-club` still work for testing. For overflow, **Try another café** checks numbered rooms in order on each attempt. Each room has the same 25 seats. Disconnects reserve a seat for 60 seconds. A Google round trip that exceeds this window may require taking a new seat.
+A room is created on first visit. The default is `main`. Once seated, choose **Invite** to share a reusable, seven-day `/cafe/join/<token>` link to that exact café. Set `PUBLIC_ORIGIN` when links should use a canonical HTTPS host. An unavailable or expired link shows an error. A full café offers retry and an explicit switch. Local room URLs such as `/?room=book-club` still work for testing. For overflow, **Try another café** checks numbered rooms in order on each attempt. Each room has the same 25 seats. Disconnects reserve a seat for 60 seconds. An open tab reconnects automatically and requests a new seat with the same profile if the hold expires. A Google round trip that exceeds this window may require taking a new seat.
 
 Choose up to five catalog interests at entry or while editing your profile. Guests keep tags in the room and the current browser. Registered profiles save them in the existing D1 column. Recognized legacy free-text terms are mapped when read. **People** shows active visitors in the current room, with search, presence filters, shared tags, and Locate.
 

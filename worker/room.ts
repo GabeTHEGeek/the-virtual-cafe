@@ -94,12 +94,12 @@ export class CafeRoom extends DurableObject<Env> {
     this.send(socket, { v: 1, type: 'ERROR', code, message });
   }
 
-  private snapshot(socket: WebSocket) {
+  private snapshot(socket: WebSocket, seatRequestId?: string) {
     const id = this.data(socket).memberId;
     const owner = this.room.members.find(member => member.visitor.id === id);
     const blocked = owner?.blocked ?? [];
     this.send(socket, {
-      v: 1, type: 'ROOM_SNAPSHOT', self: id ?? '', blocked, blockedNames: owner?.blockedNames, blockedAccounts: owner?.blockedAccounts,
+      v: 1, type: 'ROOM_SNAPSHOT', seatRequestId, self: id ?? '', blocked, blockedNames: owner?.blockedNames, blockedAccounts: owner?.blockedAccounts,
       discoverable: this.room.members.filter(member => !member.expires && !blocked.includes(member.visitor.id)
         && (!id || !member.blocked?.includes(id))).map(member => member.visitor.id),
       visitors: this.room.members.map(({visitor, expires}) => ({...visitor, interestIds: visitor.interestIds ?? readInterests(visitor.interests ?? ''), disconnected: Boolean(expires)})),
@@ -308,13 +308,19 @@ export class CafeRoom extends DurableObject<Env> {
         return;
       }
       case 'CHANGE_SEAT': {
+        if (command.visitorId && command.visitorId !== current.visitor.id) {
+          this.snapshot(socket, command.requestId);
+          return this.error(socket, 'SESSION_CHANGED', 'Your café session changed. Choose your seat again.');
+        }
         if (!seats.some(seat => seat.id === command.seatId)
           || this.room.members.some(member => member.visitor.seatId === command.seatId && member !== current)) {
-          this.snapshot(socket);
+          this.snapshot(socket, command.requestId);
           return this.error(socket, 'SEAT_UNAVAILABLE', 'That seat is unavailable. Pick another open seat.');
         }
         current.visitor.seatId = command.seatId;
-        break;
+        this.synchronize();
+        if (command.requestId) this.snapshot(socket, command.requestId);
+        return;
       }
       case 'UPDATE_STATUS':
         current.visitor.presence = command.presence;

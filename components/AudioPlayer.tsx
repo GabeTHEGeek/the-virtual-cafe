@@ -7,6 +7,7 @@ import { ToolbarOptions } from './ToolbarOptions';
 
 const tracks = [
   { name: 'Lo-fi', title: 'Lo-fi Café', description: 'Chill beats', file: 'lofi' },
+  { name: 'Hip-hop Lo-fi', title: 'Lofi Hip Hop', description: 'Chill beats · omfgdude', file: 'hip-hop-lofi', credits: '/audio/hip-hop-lofi-credits.txt' },
   { name: 'Jazz', title: 'After Hours Jazz', description: 'Piano trio', file: 'jazz' },
   { name: 'Piano', title: 'Afterglow Piano', description: 'Quiet keys', file: 'piano' },
   { name: 'Medieval Calm', title: 'Praeludium CCVII', description: 'Solo Renaissance lute', file: 'medieval-lute', credits: '/audio/medieval-lute-credits.txt' },
@@ -43,8 +44,10 @@ export function AudioPlayer({ onRainChange }: { onRainChange: (active: boolean) 
   const musicRef = useRef<HTMLAudioElement>(null);
   const ambienceRef = useRef<HTMLAudioElement>(null);
   const musicRequested = useRef(false);
+  const musicRequest = useRef(0);
   const cancelAutoplay = useRef<() => void>(undefined);
   const ambienceRequest = useRef(0);
+  const ambienceRequested = useRef(false);
 
   useEffect(() => {
     const audio = musicRef.current;
@@ -79,25 +82,32 @@ export function AudioPlayer({ onRainChange }: { onRainChange: (active: boolean) 
     document.addEventListener('click', retry, true);
     document.addEventListener('keydown', retry, true);
     tryAutoplay();
-    return stopAutoplay;
+    return () => {
+      stopAutoplay();
+      musicRequest.current++;
+      ambienceRequest.current++;
+      audio.pause();
+    };
   }, []);
 
   function playMusic(next: Track) {
     const audio = musicRef.current;
     if (!audio) return;
+    const request = ++musicRequest.current;
     cancelAutoplay.current?.();
     setYouTubeOpen(false);
     musicRequested.current = true;
     setPlaying(true);
     const source = `/audio/${next.file}.m4a`;
     if (audio.getAttribute('src') !== source) audio.src = source;
+    else if (audio.error) audio.load();
     audio.volume = volume;
     setMessage('');
     void audio.play().catch((error: DOMException) => {
-      if (error.name !== 'AbortError') {
+      if (musicRequest.current === request && error.name !== 'AbortError') {
         musicRequested.current = false;
         setPlaying(false);
-        setMessage('Music is unavailable. Try playing it again.');
+        setMessage(error.name === 'NotAllowedError' ? 'Press play to start music.' : `Could not load ${next.title}. Press play to retry.`);
       }
     });
   }
@@ -111,13 +121,17 @@ export function AudioPlayer({ onRainChange }: { onRainChange: (active: boolean) 
     const audio = ambienceRef.current;
     if (!audio) return;
     const request = ++ambienceRequest.current;
+    ambienceRequested.current = true;
+    setAmbiencePlaying(true);
     const source = `/audio/${next.file}.m4a`;
     if (audio.getAttribute('src') !== source) audio.src = source;
+    else if (audio.error) audio.load();
     setMessage('');
     audio.volume = ambienceVolume;
     if (next.file !== 'rain' && next.file !== 'storm-rolling') onRainChange(false);
     void audio.play().catch((error: DOMException) => {
       if (ambienceRequest.current !== request || error.name === 'AbortError') return;
+      ambienceRequested.current = false;
       setAmbiencePlaying(false);
       onRainChange(false);
       setMessage(`${next.name} is unavailable. Try playing it again.`);
@@ -125,22 +139,21 @@ export function AudioPlayer({ onRainChange }: { onRainChange: (active: boolean) 
   }
 
   return <div className="audio-player pill" aria-label="Café audio">
-    <audio ref={musicRef} preload="none" loop onPlay={event => {
+    <audio ref={musicRef} preload="auto" loop onPlaying={event => {
       if (event.currentTarget.paused) return;
       musicRequested.current = true;
       setPlaying(true);
     }} onPause={event => {
-      if (event.currentTarget.paused) {
-        musicRequested.current = false;
+      if (event.currentTarget.paused && !musicRequested.current) {
         setPlaying(false);
       }
     }} />
-    <audio ref={ambienceRef} preload="none" loop onPlay={event => {
+    <audio ref={ambienceRef} preload="metadata" loop onPlaying={event => {
       setAmbiencePlaying(true);
       const source = event.currentTarget.getAttribute('src');
       onRainChange(source === '/audio/rain.m4a' || source === '/audio/storm-rolling.m4a');
     }} onPause={event => {
-      if (event.currentTarget.paused) {
+      if (event.currentTarget.paused && !ambienceRequested.current) {
         setAmbiencePlaying(false);
         onRainChange(false);
       }
@@ -158,6 +171,7 @@ export function AudioPlayer({ onRainChange }: { onRainChange: (active: boolean) 
           return;
         }
         cancelAutoplay.current?.();
+        musicRequest.current++;
         musicRequested.current = false;
         setPlaying(false);
         musicRef.current?.pause();
@@ -181,6 +195,7 @@ export function AudioPlayer({ onRainChange }: { onRainChange: (active: boolean) 
         onClick={() => {
           if (!youtubeOpen) {
             cancelAutoplay.current?.();
+            musicRequest.current++;
             musicRef.current?.pause();
             musicRequested.current = false;
             setPlaying(false);
@@ -202,9 +217,12 @@ export function AudioPlayer({ onRainChange }: { onRainChange: (active: boolean) 
     <div className="ambience-controls">
       <button type="button" className="ambience-toggle" aria-label={ambiencePlaying ? 'Pause soundscape' : 'Play soundscape'}
         aria-pressed={ambiencePlaying} onClick={() => {
-          if (ambienceRef.current && !ambienceRef.current.paused) {
+          if (ambienceRequested.current) {
             ambienceRequest.current++;
-            ambienceRef.current.pause();
+            ambienceRequested.current = false;
+            setAmbiencePlaying(false);
+            onRainChange(false);
+            ambienceRef.current?.pause();
           } else playSoundscape(soundscape);
         }}><Icon name={ambiencePlaying ? 'pause' : 'play'} size={15} /></button>
       <ToolbarOptions label="Soundscape" value={soundscape.file}
@@ -213,7 +231,7 @@ export function AudioPlayer({ onRainChange }: { onRainChange: (active: boolean) 
           const next = soundscapes.find(option => option.file === file);
           if (!next || next === soundscape) return;
           setSoundscape(next);
-          if (ambienceRef.current && !ambienceRef.current.paused) playSoundscape(next);
+          if (ambienceRequested.current) playSoundscape(next);
         }} />
       <label className="slider"><input aria-label="Soundscape volume" type="range" min="0" max="1" step=".01" value={ambienceVolume} onChange={event => {
         const value = event.target.valueAsNumber;

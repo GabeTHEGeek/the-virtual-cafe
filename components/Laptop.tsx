@@ -1,6 +1,7 @@
 import type { CSSProperties } from 'react';
 import { roomWidth, roomHeight, type Seat } from '../lib/seats';
 import type { Visitor } from '../lib/cafe';
+import type { Placement } from '../lib/table-layout';
 
 export function gearFor(seat: Seat, visitor: Visitor) {
   const variant = Array.from(visitor.name).reduce((sum, char) => sum + char.charCodeAt(0), 0);
@@ -29,14 +30,14 @@ export function isSideDesk(seat: Seat) {
   return angle === 'left' || angle === 'right';
 }
 
-export function TableLaptop({ seat }: { seat: Seat }) {
+export function TableLaptop({ seat, placement }: { seat: Seat; placement?: Placement }) {
   const anchor = tableAnchors[seat.id];
   if (!anchor) return null;
   const [x, y, angle] = anchor;
   const sideDesk = angle === 'left' || angle === 'right';
-  return <span className={sideDesk ? 'table-laptop desk-laptop' : 'table-laptop'} aria-hidden="true" style={{
-    left: `${x * 100 / roomWidth}%`, top: `${y * 100 / roomHeight}%`, '--laptop-size': seat.scale,
-    zIndex: sideDesk ? undefined : Math.round(seat.y) - 1,
+  return <span data-seat-id={seat.id} className={sideDesk ? 'table-laptop desk-laptop' : 'table-laptop'} aria-hidden="true" style={{
+    left: `${placement?.x ?? x * 100 / roomWidth}%`, top: `${placement?.y ?? y * 100 / roomHeight}%`, '--laptop-size': placement?.scale ?? seat.scale,
+    zIndex: placement?.layer ?? (sideDesk ? undefined : Math.round(seat.y) - 1),
   } as CSSProperties}><Laptop angle={angle} /></span>;
 }
 

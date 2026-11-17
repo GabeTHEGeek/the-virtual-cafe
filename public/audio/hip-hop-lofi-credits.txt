@@ -1,0 +1,9 @@
+Lofi Hip Hop — omfgdude
+
+Source: https://opengameart.org/content/lofi-hip-hop
+Original audio: https://opengameart.org/sites/default/files/lofihiphop.ogg
+License: CC0 1.0 Universal
+https://creativecommons.org/publicdomain/zero/1.0/
+
+The recording was loudness-adjusted and encoded as AAC with leading
+playback metadata for streaming in The Virtual Café.
