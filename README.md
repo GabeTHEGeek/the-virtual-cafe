@@ -22,6 +22,14 @@ A cozy multiplayer coworking room. Pick a seated animal avatar, put on music, wo
 
 ![The Pomodoro panel with session length, chime options, and a sample checklist](docs/screenshots/pomodoro.jpg)
 
+### Barista menu
+
+![The barista menu with five snacks, five drinks, and a croissant and latte selected for an order](docs/screenshots/barista-menu.jpg)
+
+### Public chat
+
+![Fictional café visitors planning a 25-minute focus session in the public chat panel](docs/screenshots/public-chat.jpg)
+
 ## What you can do
 
 | Area | Features |
