@@ -16,7 +16,7 @@ export function BaristaCounter({ arrival, onBarista }: { arrival?: Arrival; onBa
 
   return <>
     <img className="counter-art" src="/art/cafe-counter.svg" alt="Owl barista behind the counter" draggable={false} />
-    <button type="button" className="barista-order" aria-label="Order snacks from the barista"
+    <button type="button" className="barista-order" data-tour="barista" aria-label="Order snacks from the barista"
       onClick={onBarista}><span>Order snacks</span></button>
     <div className="counter-board" role="status" aria-label="Café welcome board">
       <span className="sr-only">{name ? `${name} just joined` : 'The Virtual Café'}</span>

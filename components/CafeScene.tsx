@@ -30,6 +30,7 @@ export function CafeScene({ occupancy: originalOccupancy, editable = false, onLa
   const [tables, setTables] = useState<TableLayouts>(defaultTables);
   const [editing, setEditing] = useState(false);
   const [layoutError, setLayoutError] = useState('');
+  const [loadedRoom, setLoadedRoom] = useState<string>();
   useEffect(() => {
     try {
       const saved = localStorage.getItem(layoutStorageKey);
@@ -62,12 +63,13 @@ export function CafeScene({ occupancy: originalOccupancy, editable = false, onLa
   const selected = occupancy.find(seat => seat.occupant && seat.occupant.id === profileId);
   return <div className="scene-scroll">
     <div className="scene" style={{ aspectRatio: cafeArtwork.aspect }} aria-label="Café floor">
-      <img className="room-art" src={roomArt.art} alt={roomArt.description} fetchPriority="high" />
-      <img className="fireplace-art" src={roomArt.hearth} alt="" aria-hidden="true"
+      <img className="room-art" src={roomArt.art} alt={roomArt.description} fetchPriority="high"
+        width={roomWidth} height={roomHeight} decoding="async" onLoad={() => setLoadedRoom(roomArt.art)} />
+      {loadedRoom === roomArt.art && <img className="fireplace-art" src={roomArt.hearth} alt="" aria-hidden="true" decoding="async" fetchPriority="low"
         style={{
           left: `${35 / roomWidth * 100}%`, top: `${360 / roomHeight * 100}%`,
           width: `${220 / roomWidth * 100}%`, height: `${210 / roomHeight * 100}%`,
-        }} />
+        }} />}
       <BaristaCounter arrival={arrival} onBarista={onBarista} />
       {time === 'day' && <div className="sunlight" aria-hidden="true" />}
       {rain && cafeArtwork.windows.map(shape => <div key={shape} className="window-rain" style={{ clipPath: shape }} aria-hidden="true" />)}
@@ -76,7 +78,7 @@ export function CafeScene({ occupancy: originalOccupancy, editable = false, onLa
       {(Object.keys(markers) as Zone[]).map(zone => {
         const [x, y, icon] = markers[zone];
         const group = occupancy.filter(seat => seat.zone === zone);
-        return <div key={zone} className="zone-label" style={{ left: `${x}%`, top: `${y}%` }}>
+        return <div key={zone} className="zone-label" data-tour={zone === 'shared' ? 'seats' : undefined} style={{ left: `${x}%`, top: `${y}%` }}>
           <Icon name={icon} size={16} /><span>{zones[zone]}</span>
           <small>{group.filter(seat => seat.occupant).length}/{group.length}</small>
         </div>;

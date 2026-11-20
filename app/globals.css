@@ -715,3 +715,40 @@ svg { flex-shrink: 0; vertical-align: middle; }
 .mention-suggestions { display: flex; flex-direction: column; gap: 3px; padding-top: 8px; }
 .mention-suggestions button { text-align: left; font-size: 14px; padding: 7px 9px; }
 .mention-suggestions button[aria-selected=true] { background: #78582e; border-color: #e9bd7d; }
+
+.barista-welcome {
+  width: min(440px, calc(100vw - 32px)); max-height: calc(100dvh - 32px); overflow-y: auto;
+  margin: auto; padding: 28px 30px 22px; border: 1px solid #c6a170; border-radius: 22px;
+  background: #20271ffb; color: var(--cream); box-shadow: 0 16px 70px #100c0866; text-align: center;
+}
+.barista-welcome::backdrop { background: #151c1738; }
+.welcome-close { position: absolute; top: 13px; right: 13px; }
+.welcome-owl { display: block; margin: 0 auto 10px; object-fit: contain; filter: drop-shadow(0 0 14px #e7b56d30); }
+.welcome-host { font-size: 12px; color: #e7c799; }
+.welcome-copy h2 { margin: 14px 0 10px; font-size: clamp(22px, 4vw, 28px); line-height: 1.2; }
+.welcome-copy p { margin: 0; font-size: 15px; line-height: 1.65; color: #e5dac7; min-height: 100px; }
+.welcome-progress { display: flex; justify-content: center; gap: 7px; margin: 22px 0; }
+.welcome-progress span { height: 5px; width: 18px; border-radius: 8px; background: #bfa57940; }
+.welcome-progress .current { background: #f1c27d; }
+.welcome-navigation { display: flex; justify-content: center; align-items: center; gap: 12px; }
+.welcome-next { display: flex; justify-content: center; align-items: center; gap: 10px; border: 0; border-radius: 10px; padding: 12px 20px; background: var(--gold); color: #322315; font-weight: 750; min-width: 175px; }
+.welcome-back { background: transparent; color: #e7c799; border: 1px solid #c6a17066; border-radius: 10px; padding: 11px 14px; }
+.welcome-skip { display: block; margin: 18px auto 0; padding: 6px; color: #d1c4af; font-size: 12px; border: 0; background: transparent; text-decoration: underline; text-underline-offset: 3px; }
+.barista-welcome button:focus-visible { outline: 2px solid #ffe1aa; outline-offset: 4px; }
+@media (max-width: 480px) { .barista-welcome { padding: 24px 20px 18px; } .welcome-copy p { min-height: 0; } .welcome-owl { width: 85px; height: 100px; } }
+
+.barista-welcome.visual-welcome { width: min(460px, calc(100vw - 28px)); max-height: none; padding: 0; border: 0; background: transparent; box-shadow: none; overflow: visible; }
+.welcome-surface { position: relative; max-height: calc(100dvh - 28px); overflow-y: auto; padding: 22px 26px 18px; border: 1px solid #c6a170; border-radius: 22px; background: #20271ffb; box-shadow: 0 16px 70px #100c0866; }
+.visual-welcome .welcome-owl { width: 64px; height: 76px; margin-bottom: 4px; }
+.visual-welcome .welcome-copy h2 { margin-top: 10px; font-size: 25px; }
+.visual-welcome .welcome-copy p { min-height: 0; font-size: 14px; line-height: 1.55; }
+.welcome-screenshot { margin: 14px 0 0; overflow: hidden; border: 1px solid #c6a17055; border-radius: 10px; background: #151b16; }
+.welcome-screenshot img { display: block; width: 100%; height: auto; max-height: 190px; object-fit: contain; }
+.visual-welcome .welcome-progress { margin: 16px 0; }
+.visual-welcome .welcome-skip { margin-top: 12px; }
+.welcome-guide-layer { position: fixed; inset: 0; width: 100vw; height: 100dvh; overflow: visible; pointer-events: none; z-index: -1; }
+.welcome-target-label { position: fixed; padding: 6px 10px; max-width: 200px; color: #332515; background: #ffcf86; border-radius: 7px; font-size: 12px; font-weight: 750; pointer-events: none; z-index: -1; }
+@media (min-width: 850px) { .barista-welcome.visual-welcome[data-step="1"] { margin-left: 24px; margin-right: auto; } }
+@media (max-height: 650px) { .visual-welcome .welcome-owl { display: none; } .welcome-screenshot img { max-height: 130px; } .welcome-surface { padding-top: 16px; } }
+@media (max-width: 480px) { .welcome-surface { padding: 20px 18px 15px; } .welcome-screenshot img { max-height: 170px; } .welcome-guide-layer, .welcome-target-label { display: none; } }
+.snack-menu .barista-tour-link { background: transparent; color: #f3cf97; border: 0; padding: 0 0 12px; font-size: 13px; text-decoration: underline; text-underline-offset: 3px; }

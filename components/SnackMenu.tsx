@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import { drinkIds, drinks, snackIds, snacks, type CafeOrder } from '../lib/snacks';
 
-export function SnackMenu({canOrder, recipient, recipients, setRecipient, error, onOrder, onClose}: {
+export function SnackMenu({canOrder, recipient, recipients, setRecipient, error, onOrder, onClose, onTour}: {
   canOrder: boolean; recipient?: string; recipients: {id: string; name: string}[];
-  setRecipient: (id?: string) => void; error?: string; onOrder: (order: CafeOrder) => void; onClose: () => void;
+  setRecipient: (id?: string) => void; error?: string; onOrder: (order: CafeOrder) => void; onClose: () => void; onTour: () => void;
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
   const [order, setOrder] = useState<CafeOrder>({});
@@ -20,6 +20,7 @@ export function SnackMenu({canOrder, recipient, recipients, setRecipient, error,
         <button type="button" aria-label="Close barista menu" onClick={onClose}>×</button>
       </header>
       <p>{canOrder ? 'Choose a complimentary snack, drink, or both.' : 'Take a seat to place an order.'}</p>
+      <button className="barista-tour-link" type="button" onClick={onTour}>Café tour with Mr. Owly</button>
       {canOrder && (recipients.length > 0 || recipient) && <label className="snack-recipient">
         Deliver to
         <select value={recipient ?? ''} onChange={event => setRecipient(event.target.value || undefined)}>

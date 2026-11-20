@@ -12,8 +12,16 @@ async function chooseOption(page, menu, option) {
   await page.getByRole('group', {name: `${menu} options`}).getByRole('button', {name: option, exact: true}).click();
 }
 
+async function dismissIntro(page) {
+  await page.waitForFunction(() => localStorage.getItem('cafe-mr-owly-intro-v1') === 'seen'
+    || document.querySelector('.barista-welcome[open]'));
+  const skip = button(page, 'Skip introduction');
+  if (await skip.isVisible()) await skip.click();
+}
+
 async function join(page, url, name, presence) {
   await page.goto(url);
+  await dismissIntro(page);
   await page.getByText('Connecting to the café…').waitFor({state: 'hidden'});
   await page.getByRole('textbox', {name: 'Nickname'}).fill(name);
   if (presence) await page.getByRole('combobox', {name: 'Starting presence'}).selectOption(presence);
@@ -35,6 +43,7 @@ test('an open tab reseats its visitor after the sleep disconnect expires', {
     serverSocket = socket.connectToServer();
   });
   await sleeper.goto(url);
+  await dismissIntro(sleeper);
   await sleeper.getByText('Connecting to the café…').waitFor({state: 'hidden'});
   await sleeper.getByRole('textbox', {name: 'Nickname'}).fill('Clover');
   await sleeper.getByRole('textbox', {name: 'Working on'}).fill('Sketching wildflowers');
@@ -187,6 +196,7 @@ test('local preview preserves occupancy controls, Lo-fi autoplay, and opt-in rai
   t.after(() => browser.close());
   const page = await browser.newPage({viewport: {width: 1440, height: 900}});
   await page.goto(origin + '/?preview=1');
+  await dismissIntro(page);
   await button(page, 'Browse café').click();
   const night = button(page, 'Night mode');
   await night.click();
@@ -261,6 +271,7 @@ test('People filters live visitors and invites a new browser to the same room', 
   for (const page of [a,b]) page.setDefaultTimeout(6500);
   const url = `${origin}/?room=social-${crypto.randomUUID().slice(0, 8)}`;
   await a.goto(url);
+  await dismissIntro(a);
   await a.getByText('Connecting to the café…').waitFor({state:'hidden'});
   await a.getByRole('textbox', {name:'Nickname'}).fill('Cleo');
   await a.locator('.interest-picker summary').click();
@@ -276,6 +287,7 @@ test('People filters live visitors and invites a new browser to the same room', 
   await button(a,'Close invitation').click();
 
   await b.goto(invite);
+  await dismissIntro(b);
   await b.getByText('Connecting to the café…').waitFor({state:'hidden'});
   await b.getByRole('textbox', {name:'Nickname'}).fill('Fern');
   await b.getByRole('textbox', {name:/Working on/}).fill('A seaside novel');
@@ -339,6 +351,7 @@ test('Pomodoro continues behind the closed panel and chimes on completion', {tim
   });
   await page.clock.install();
   await page.goto(origin + '/?preview=1');
+  await dismissIntro(page);
   await button(page, 'Browse café').click();
   await button(page, 'Pomodoro timer').click();
   const panel = page.getByRole('dialog', {name: 'Pomodoro'});
@@ -482,6 +495,7 @@ test('coworking layout preview supports dragging, layers, persistence and JSON',
   const errors = [];
   page.on('pageerror', error => errors.push(error.message));
   await page.goto(`${origin}/?preview=1`);
+  await dismissIntro(page);
   await button(page, 'Edit table layout').click();
   assert.equal(await page.locator('.seat-snack').count(), 8);
   assert.equal(await page.locator('.seat-drink').count(), 8);
@@ -692,6 +706,7 @@ test('music switches keep the latest track playing when an older playback attemp
     };
   });
   await page.goto(origin + '/?preview=1');
+  await dismissIntro(page);
   await button(page, 'Browse café').click();
   await page.waitForFunction(() => !document.querySelector('.audio-player audio').paused);
   await chooseOption(page, 'Music style', 'Jazz');
@@ -728,6 +743,7 @@ test('music can retry a real media load failure', {timeout: 20_000}, async t => 
   t.after(() => browser.close());
   const page = await browser.newPage({viewport: {width: 1366, height: 768}});
   await page.goto(origin + '/?preview=1');
+  await dismissIntro(page);
   await button(page, 'Browse café').click();
   await page.waitForFunction(() => !document.querySelector('.audio-player audio').paused);
   await page.route('**/radiant-calm.m4a', route => route.abort('failed'));
@@ -740,4 +756,59 @@ test('music can retry a real media load failure', {timeout: 20_000}, async t => 
     return audio.src.endsWith('/radiant-calm.m4a') && !audio.paused && audio.currentTime > 0 && !audio.error;
   });
   assert.equal(await page.locator('.audio-error').count(), 0);
+});
+
+test('Mr. Owly welcomes new visitors and remembers completed or skipped introductions', {timeout: 25_000}, async t => {
+  const browser = await chromium.launch(launchOptions);
+  t.after(() => browser.close());
+  const page = await browser.newPage({viewport: {width: 1440, height: 900}});
+  await page.goto(origin + '/?preview=1');
+  const welcome = page.locator('dialog.barista-welcome');
+  await welcome.waitFor();
+  await welcome.locator('.welcome-screenshot img').evaluate(image => image.decode());
+  await page.waitForFunction(() => document.querySelectorAll('.welcome-guide-layer rect').length === 1);
+  await page.getByRole('heading', {name: 'Welcome to the café', exact: true}).waitFor();
+  assert.equal(await page.locator('.entry-card').count(), 0);
+  assert.equal(await page.evaluate(() => document.activeElement?.textContent?.trim()), 'Show me around');
+  await button(page, 'Show me around').click();
+  await page.getByRole('heading', {name: 'Let’s find your seat', exact: true}).waitFor();
+  assert.ok((await welcome.locator('.welcome-screenshot img').getAttribute('src')).includes('choose-your-seat'));
+  await page.getByText('Your coworking seats', {exact: true}).waitFor();
+  await button(page, 'Next').click();
+  await page.getByRole('heading', {name: 'Find your rhythm', exact: true}).waitFor();
+  await page.waitForFunction(() => document.querySelectorAll('.welcome-guide-layer rect').length === 2);
+  await button(page, 'Back').click();
+  await page.getByRole('heading', {name: 'Let’s find your seat', exact: true}).waitFor();
+  await button(page, 'Next').click();
+  await button(page, 'Next').click();
+  await page.getByRole('heading', {name: 'Make yourself at home', exact: true}).waitFor();
+  await page.screenshot({path: '/private/tmp/cafe-mr-owly-welcome.png'});
+  await button(page, 'Let’s settle in').click();
+  await page.getByRole('textbox', {name: 'Nickname'}).waitFor();
+  assert.equal(await welcome.count(), 0);
+  await page.reload();
+  await page.getByRole('textbox', {name: 'Nickname'}).waitFor();
+  assert.equal(await welcome.count(), 0);
+  await button(page, 'Browse café').click();
+  await button(page, 'Order snacks from the barista').click();
+  await button(page, 'Café tour with Mr. Owly').click();
+  await page.getByRole('heading', {name: 'Welcome to the café', exact: true}).waitFor();
+  await button(page, 'Skip introduction').click();
+
+  const returning = await browser.newPage({viewport: {width: 390, height: 844}});
+  await returning.goto(origin + '/?preview=1');
+  await returning.locator('.barista-welcome[open]').waitFor();
+  await returning.locator('.welcome-screenshot img').evaluate(image => image.decode());
+  await button(returning, 'I’ve been here before · Skip intro').click();
+  await returning.getByRole('textbox', {name: 'Nickname'}).waitFor();
+  await returning.reload();
+  await returning.getByRole('textbox', {name: 'Nickname'}).waitFor();
+  assert.equal(await returning.locator('.barista-welcome').count(), 0);
+  await returning.evaluate(() => localStorage.removeItem('cafe-mr-owly-intro-v1'));
+  await returning.reload();
+  await returning.locator('.barista-welcome[open]').waitFor();
+  const bounds = await returning.locator('.barista-welcome').boundingBox();
+  assert.ok(bounds.width <= 390 && bounds.height <= 844);
+  await returning.keyboard.press('Escape');
+  await returning.getByRole('textbox', {name: 'Nickname'}).waitFor();
 });

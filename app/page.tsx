@@ -9,6 +9,7 @@ import { PomodoroTimer } from '../components/PomodoroTimer';
 import type { CafeTime } from '../lib/artwork';
 import { CafeScene } from '../components/CafeScene';
 import { EntryForm } from '../components/EntryForm';
+import { BaristaWelcome, welcomeStorageKey } from '../components/BaristaWelcome';
 import { Icon } from '../components/Icon';
 import { PresenceSelector } from '../components/PresenceSelector';
 import { DirectMessages, type Contact } from '../components/DirectMessages';
@@ -32,6 +33,7 @@ export default function Cafe() {
   const [guests, setGuests] = useState(() => mockVisitors.slice(0, 5));
   const [localVisitor, setVisitor] = useState<Visitor>();
   const [entryOpen, setEntryOpen] = useState(true);
+  const [welcome, setWelcome] = useState<'checking' | 'open' | 'closed'>('checking');
   const [profileId, setProfileId] = useState<string>();
   const [choosing, setChoosing] = useState(false);
   const [mockArrival, setMockArrival] = useState<Arrival>();
@@ -96,6 +98,8 @@ export default function Cafe() {
     const local = ['localhost', '127.0.0.1', '[::1]'].includes(url.hostname);
     setMock(process.env.NODE_ENV === 'development' || (local && url.searchParams.get('preview') === '1'));
     setInviteToken(url.searchParams.get('invite') ?? undefined);
+    try { setWelcome(localStorage.getItem(welcomeStorageKey) === 'seen' ? 'closed' : 'open'); }
+    catch { setWelcome('open'); }
     try {
       if (localStorage.getItem('cafe-time') === 'night') setCafeTime('night');
       const saved = localStorage.getItem('cafe-guest-profile');
@@ -200,6 +204,12 @@ export default function Cafe() {
   }, [live.moderation]);
   const occupancy = getOccupancy(visitors);
   const available = seats.length - visitors.length;
+
+  function finishWelcome() {
+    try { localStorage.setItem(welcomeStorageKey, 'seen'); }
+    catch { /* Visitors can still dismiss the introduction without browser storage. */ }
+    setWelcome('closed');
+  }
 
   function playEntrySound() {
     const sound = entryAudio.current ??= new Audio('/audio/cafe-entry.m4a');
@@ -377,7 +387,7 @@ export default function Cafe() {
   }
 
   return <main className="cafe-shell" onKeyDown={event => {
-    if (event.key !== 'Escape') return;
+    if (event.key !== 'Escape' || welcome === 'open') return;
     if (snackMenu || postcardOpen) return;
     else if (inviteOpen) setInviteOpen(false);
     else if (peopleOpen) setPeopleOpen(false);
@@ -483,7 +493,8 @@ export default function Cafe() {
       {snackMenu && <SnackMenu canOrder={Boolean(visitor)} recipient={recipient} setRecipient={setRecipient}
         recipients={directory.filter(person => person.id !== visitor?.id && !blocked.has(person.id))}
         error={live.error?.code.startsWith('TREAT_') ? live.error.message : undefined}
-        onOrder={orderItems} onClose={() => setSnackMenu(false)} />}
+        onOrder={orderItems} onClose={() => setSnackMenu(false)}
+        onTour={() => {setSnackMenu(false); setWelcome('open');}} />}
       {visitor && postcardOpen && <PostcardComposer
         details={{time: cafeTime, animal: visitor.animal, seatId: visitor.seatId, name: visitor.name}}
         receipt={live.postcard} canShare={!mock && live.connection === 'ready'}
@@ -515,7 +526,8 @@ export default function Cafe() {
       {!mock && account?.accountId && messagesOpen && <DirectMessages key={contact?.peer ?? 'inbox'} account={account.accountId}
         contact={contact} setContact={setContact} delivery={live.direct} close={() => setMessagesOpen(false)} />}
       {!mock && visitor && editing && <ProfileEditor visitor={visitor} close={() => setEditing(false)} save={saveProfile} />}
-      {entryOpen && !visitor && live.error?.code !== 'INVALID_INVITE' && <EntryForm full={available === 0} defaults={account?.profile ?? (!mock ? savedGuestProfile : undefined)} onEnter={enter} onBrowse={() => setEntryOpen(false)} />}
+      {welcome === 'open' && <BaristaWelcome onFinish={finishWelcome} />}
+      {welcome === 'closed' && entryOpen && !visitor && live.error?.code !== 'INVALID_INVITE' && <EntryForm full={available === 0} defaults={account?.profile ?? (!mock ? savedGuestProfile : undefined)} onEnter={enter} onBrowse={() => setEntryOpen(false)} />}
       {choosing && <div className="move-hint pill" role="status">Choose an open seat in the café</div>}
       <div className="stage-actions">
         <PomodoroTimer />

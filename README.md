@@ -30,6 +30,12 @@ A cozy multiplayer coworking room. Pick a seated animal avatar, put on music, wo
 
 ![Fictional café visitors planning a 25-minute focus session in the public chat panel](docs/screenshots/public-chat.jpg)
 
+### Mr. Owly’s café tour
+
+Mr. Owly welcomes new visitors with screenshots and highlights of the café controls. Visitors can skip the tour, and the browser remembers their choice. Replay it from the barista menu.
+
+![Mr. Owly highlighting the music controls and Pomodoro timer during the café tour](docs/previews/mr-owly-visual-tour.png)
+
 ## Developer table layout
 
 Open `http://127.0.0.1:8787/?preview=1` with the local Worker running on port 8787, or use the development preview, then choose **Edit table layout**. Select a coworking seat and object to drag its placement point or edit its position, scale, and layer. Both coworking tables show an avatar, laptop, croissant, and latte at every seat while editing.

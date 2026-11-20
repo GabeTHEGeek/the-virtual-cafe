@@ -138,7 +138,7 @@ export function AudioPlayer({ onRainChange }: { onRainChange: (active: boolean) 
     });
   }
 
-  return <div className="audio-player pill" aria-label="Café audio">
+  return <div className="audio-player pill" data-tour="audio" aria-label="Café audio">
     <audio ref={musicRef} preload="auto" loop onPlaying={event => {
       if (event.currentTarget.paused) return;
       musicRequested.current = true;
